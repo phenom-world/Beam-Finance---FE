@@ -1,63 +1,82 @@
-import { useState, useTransition } from 'react';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useTransition } from 'react';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
 
 import { useFundWallet } from '../../hooks/api/wallet';
+import { cardDetailSchema } from '../../schemas/card-detail';
 import { PaymentMethod } from '../../types';
 import Button from '../Button';
 import Input from '../Input';
 
-interface PaymentFormData {
-  cardDetails: string;
-  expiryDate: string;
-  cvv: string;
-}
+type CardDetailFormData = z.infer<typeof cardDetailSchema>;
 
 const PaymentDetails = ({ amount, onClose }: { amount: number; onClose: () => void }) => {
   const [isLoading, startTransition] = useTransition();
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    setValue,
+  } = useForm<CardDetailFormData>({
+    resolver: zodResolver(cardDetailSchema),
+  });
 
   const { handleFundWallet } = useFundWallet({
     onSuccess: onClose,
   });
 
-  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const onSubmit = (data: CardDetailFormData) => {
     startTransition(() => {
       handleFundWallet({ amount, paymentMethod: PaymentMethod.CARD });
     });
   };
-  const [formData, setFormData] = useState<PaymentFormData>({
-    cardDetails: '',
-    expiryDate: '',
-    cvv: '',
-  });
+
+  const handleExpiryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let value = e.target.value;
+    // Allow backspace to delete the slash
+    if (value.length === 3 && value[2] === '/') {
+      value = value.slice(0, 2);
+    } else {
+      value = value.replace(/\D/g, '');
+      if (value.length >= 2) {
+        value = value.slice(0, 2) + '/' + value.slice(2);
+      }
+    }
+    setValue('expiry', value);
+  };
 
   return (
-    <form onSubmit={onSubmit} className='space-y-4 pt-3'>
+    <form onSubmit={handleSubmit(onSubmit)} className='space-y-4 pt-3'>
       <Input
         id='cardDetails'
         label='Card Details'
         placeholder='1234 5678 9012 3456'
-        value={formData.cardDetails}
-        onChange={(e) => setFormData({ ...formData, cardDetails: e.target.value })}
+        error={errors.cardDetails?.message}
+        {...register('cardDetails')}
         labelClassName='font-semibold'
-        required
+        maxLength={16}
       />
       <Input
-        id='expiryDate'
+        id='expiry'
         label='Expiry Date'
         placeholder='MM/YY'
-        value={formData.expiryDate}
-        onChange={(e) => setFormData({ ...formData, expiryDate: e.target.value })}
+        error={errors.expiry?.message}
+        {...register('expiry', {
+          onChange: handleExpiryChange,
+        })}
         labelClassName='font-semibold'
-        required
+        maxLength={5}
       />
       <Input
         id='cvv'
         label='CVV'
         placeholder='123'
-        value={formData.cvv}
-        onChange={(e) => setFormData({ ...formData, cvv: e.target.value })}
+        error={errors.cvv?.message}
+        {...register('cvv')}
         labelClassName='font-semibold'
-        required
+        maxLength={3}
       />
       <div className='pt-[67px]'>
         <Button
